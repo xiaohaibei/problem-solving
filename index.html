@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在线刷题</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1 class="logo">在线刷题</h1>
+      <p class="subtitle" id="quiz-title">加载中...</p>
+    </header>
+
+    <!-- 开始页 -->
+    <section class="screen screen-start" id="screen-start">
+      <div class="start-card">
+        <div class="start-icon">📚</div>
+        <h2>准备好开始练习了吗？</h2>
+        <p class="start-desc">共 <strong id="total-count">0</strong> 道题目，选择答案后查看解析，支持上一题 / 下一题切换。</p>
+        <button class="btn btn-primary btn-lg" id="btn-start">开始做题</button>
+      </div>
+    </section>
+
+    <!-- 做题页 -->
+    <section class="screen screen-quiz hidden" id="screen-quiz">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="progress-text">
+        第 <span id="current-num">1</span> / <span id="total-num">0</span> 题
+      </div>
+
+      <div class="question-card">
+        <div class="question-type">单选题</div>
+        <h2 class="question-text" id="question-text"></h2>
+
+        <ul class="options" id="options-list"></ul>
+
+        <div class="answer-panel hidden" id="answer-panel">
+          <div class="answer-result" id="answer-result"></div>
+          <div class="answer-explanation" id="answer-explanation"></div>
+        </div>
+      </div>
+
+      <div class="nav-bar">
+        <button class="btn btn-secondary" id="btn-prev" disabled>上一题</button>
+        <button class="btn btn-secondary" id="btn-next">下一题</button>
+      </div>
+    </section>
+
+    <!-- 加载失败 -->
+    <section class="screen screen-error hidden" id="screen-error">
+      <div class="error-card">
+        <div class="error-icon">⚠️</div>
+        <h2>题库加载失败</h2>
+        <p id="error-message">请确认 data/questions.json 文件存在且格式正确。</p>
+        <p class="error-hint">可将 PDF 放入 source/ 目录，运行 <code>python scripts/pdf_to_questions.py</code> 生成题库。</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

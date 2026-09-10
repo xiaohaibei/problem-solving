@@ -1,0 +1,24 @@
+# PDF 源码（本地导入用，不上传 GitHub）
+source/
+*.pdf
+
+# 解析产生的临时文件
+_q*.txt
+_preview.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 系统 / IDE
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# 本地调试脚本
+scripts/_debug*.py
+scripts/_trace.py
