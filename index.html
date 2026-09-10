@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>在线刷题</title>
+  <title>智能在线刷题</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,17 +19,61 @@
         <div class="start-icon">📚</div>
         <h2>准备好开始练习了吗？</h2>
         <p class="start-desc">共 <strong id="total-count">0</strong> 道题目，选择答案后查看解析，支持上一题 / 下一题切换。</p>
-        <button class="btn btn-primary btn-lg" id="btn-start">开始做题</button>
+
+        <div class="start-stats hidden" id="start-stats">
+          <div class="start-stat">
+            <span class="start-stat-value" id="stat-answered">0</span>
+            <span class="start-stat-label">已练习</span>
+          </div>
+          <div class="start-stat">
+            <span class="start-stat-value stat-wrong" id="stat-wrong">0</span>
+            <span class="start-stat-label">错题</span>
+          </div>
+        </div>
+
+        <div class="start-actions">
+          <div class="start-actions-row">
+            <button class="btn btn-primary btn-action" id="btn-start">开始做题</button>
+            <button class="btn btn-danger-outline btn-action" id="btn-clear-progress" type="button" disabled>清除做题记录</button>
+          </div>
+          <div class="start-actions-row">
+            <button class="btn btn-secondary btn-action" id="btn-wrong-book" type="button">
+              <span class="btn-action-text">错题记录</span>
+              <span class="badge badge-inline hidden" id="wrong-count-start">0</span>
+            </button>
+            <button class="btn btn-danger-outline btn-action" id="btn-clear-wrong-start" type="button" disabled>清除错题记录</button>
+          </div>
+        </div>
       </div>
+    </section>
+
+    <!-- 错题记录 -->
+    <section class="screen screen-wrong hidden" id="screen-wrong">
+      <div class="wrong-header">
+        <h2>错题记录</h2>
+        <button class="btn btn-danger btn-sm" id="btn-clear-wrong" type="button" disabled>一键清空</button>
+      </div>
+      <p class="wrong-empty hidden" id="wrong-empty">暂无错题，继续加油！</p>
+      <ul class="wrong-list" id="wrong-list"></ul>
+      <button class="btn btn-secondary btn-block-nav" id="btn-back-start" type="button">返回首页</button>
     </section>
 
     <!-- 做题页 -->
     <section class="screen screen-quiz hidden" id="screen-quiz">
+      <div class="quiz-toolbar">
+        <button class="btn btn-secondary btn-toolbar" id="btn-back-home-quiz" type="button">返回首页</button>
+        <button class="btn btn-secondary btn-toolbar" id="btn-wrong-book-quiz" type="button">
+          错题记录
+          <span class="badge badge-inline hidden" id="wrong-count-quiz">0</span>
+        </button>
+      </div>
       <div class="progress-bar">
         <div class="progress-fill" id="progress-fill"></div>
       </div>
-      <div class="progress-text">
-        第 <span id="current-num">1</span> / <span id="total-num">0</span> 题
+      <div class="progress-status">
+        <span class="progress-prefix">第</span>
+        <span class="progress-current-num" id="current-num">1</span>
+        <span class="progress-suffix">/ <span id="total-num">0</span> 题</span>
       </div>
 
       <div class="question-card">
@@ -38,7 +82,7 @@
 
         <ul class="options" id="options-list"></ul>
 
-        <div class="answer-panel hidden" id="answer-panel">
+        <div class="answer-panel" id="answer-panel">
           <div class="answer-result" id="answer-result"></div>
           <div class="answer-explanation" id="answer-explanation"></div>
         </div>
