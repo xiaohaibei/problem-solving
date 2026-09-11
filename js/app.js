@@ -6,13 +6,25 @@
   let quizTitle = "在线刷题";
   let questions = [];
   let currentIndex = 0;
+  /** @type {"all" | "wrong"} */
+  let quizMode = "all";
+  /** @type {number[]} 错题重做题在 questions 中的索引 */
+  let wrongIndices = [];
   /** @type {Record<number, number>} 每题用户选择的选项索引，key 为题目 id */
   const selections = {};
-  /** @type {Set<number>} 错题 id 集合 */
+  /** @type {Set<number>} 错题 id 集合（错题记录，与做题记录独立） */
   let wrongIds = new Set();
+  /** @type {Set<number>} 本次错题重做已作答的题目 id */
+  let wrongRedoAttempted = new Set();
+  /** 进入做题页后短暂忽略选项点击，防止按钮点击穿透 */
+  let quizInteractionReady = true;
+  let quizInteractionTimer = null;
+  /** 答题卡是否展开 */
+  let answerSheetExpanded = false;
 
   const $ = (id) => document.getElementById(id);
 
+  const appEl = document.querySelector(".app");
   const screenStart = $("screen-start");
   const screenQuiz = $("screen-quiz");
   const screenWrong = $("screen-wrong");
@@ -96,6 +108,23 @@
     return Object.keys(selections).length;
   }
 
+  function getCorrectCount() {
+    let correct = 0;
+    Object.entries(selections).forEach(([idStr, selected]) => {
+      const q = questions.find((item) => item.id === Number(idStr));
+      if (q && isAnswerCorrect(q, selected)) {
+        correct += 1;
+      }
+    });
+    return correct;
+  }
+
+  function getCorrectRateText() {
+    const answered = getAnsweredCount();
+    if (answered === 0) return "--";
+    return Math.round((getCorrectCount() / answered) * 100) + "%";
+  }
+
   function updateProgressUI() {
     const count = getAnsweredCount();
     const wrongCount = wrongIds.size;
@@ -103,12 +132,16 @@
     const clearBtn = $("btn-clear-progress");
     const stats = $("start-stats");
     const statAnswered = $("stat-answered");
+    const statRate = $("stat-rate");
 
     if (statAnswered) {
       statAnswered.textContent = count;
     }
+    if (statRate) {
+      statRate.textContent = getCorrectRateText();
+    }
     if (stats) {
-      stats.classList.toggle("hidden", count === 0 && wrongCount === 0);
+      stats.classList.remove("hidden");
     }
     if (startBtn) {
       startBtn.textContent = count > 0 ? "继续做题" : "开始做题";
@@ -119,6 +152,9 @@
   }
 
   function goHome() {
+    quizMode = "all";
+    wrongIndices = [];
+    wrongRedoAttempted.clear();
     saveProgress();
     showScreen("start");
     updateProgressUI();
@@ -144,7 +180,19 @@
       if (clearBtn) clearBtn.disabled = count === 0;
     });
 
+    const redoBtn = $("btn-redo-wrong");
+    if (redoBtn) redoBtn.disabled = count === 0;
+
     updateProgressUI();
+  }
+
+  function lockQuizInteraction() {
+    quizInteractionReady = false;
+    if (quizInteractionTimer) clearTimeout(quizInteractionTimer);
+    quizInteractionTimer = setTimeout(() => {
+      quizInteractionReady = true;
+      quizInteractionTimer = null;
+    }, 400);
   }
 
   function showScreen(name) {
@@ -152,6 +200,13 @@
     screenQuiz.classList.toggle("hidden", name !== "quiz");
     screenWrong.classList.toggle("hidden", name !== "wrong");
     screenError.classList.add("hidden");
+    if (appEl) {
+      appEl.classList.toggle("is-quiz", name === "quiz");
+    }
+    if (name === "quiz") {
+      lockQuizInteraction();
+      collapseAnswerSheet();
+    }
   }
 
   async function init() {
@@ -199,6 +254,7 @@
     };
     $("btn-clear-wrong").addEventListener("click", onClearWrong);
     $("btn-clear-wrong-start").addEventListener("click", onClearWrong);
+    $("btn-redo-wrong").addEventListener("click", startWrongRedo);
     $("btn-clear-progress").addEventListener("click", () => {
       if (getAnsweredCount() === 0) return;
       if (confirm("确定清除全部做题记录吗？已作答内容将被重置。")) {
@@ -208,8 +264,9 @@
         }
       }
     });
-    $("btn-prev").addEventListener("click", () => goTo(currentIndex - 1));
-    $("btn-next").addEventListener("click", () => goTo(currentIndex + 1));
+    $("btn-prev").addEventListener("click", () => goToRelative(-1));
+    $("btn-next").addEventListener("click", () => goToRelative(1));
+    $("answer-sheet-toggle").addEventListener("click", toggleAnswerSheet);
   }
 
   function getQuestionIndexById(id) {
@@ -217,11 +274,38 @@
   }
 
   function startQuiz() {
+    quizMode = "all";
+    wrongIndices = [];
+    wrongRedoAttempted.clear();
     if (currentIndex < 0 || currentIndex >= questions.length) {
       currentIndex = 0;
     }
     showScreen("quiz");
     renderQuestion();
+  }
+
+  function buildWrongIndices() {
+    return [...wrongIds]
+      .sort((a, b) => a - b)
+      .map((id) => getQuestionIndexById(id))
+      .filter((index) => index >= 0);
+  }
+
+  function startWrongRedo() {
+    wrongIndices = buildWrongIndices();
+    if (wrongIndices.length === 0) return;
+
+    quizMode = "wrong";
+    wrongRedoAttempted.clear();
+    currentIndex = wrongIndices[0];
+    saveProgress();
+    showScreen("quiz");
+    renderQuestion();
+  }
+
+  /** 错题重做中、尚未重新作答：不展示做题记录里的答案 */
+  function isWrongRedoPending(q) {
+    return quizMode === "wrong" && wrongIds.has(q.id) && !wrongRedoAttempted.has(q.id);
   }
 
   function openWrongBook() {
@@ -233,15 +317,29 @@
   function goToQuestionById(id) {
     const index = getQuestionIndexById(id);
     if (index < 0) return;
+    quizMode = "all";
+    wrongIndices = [];
+    wrongRedoAttempted.clear();
     currentIndex = index;
     saveProgress();
     showScreen("quiz");
     renderQuestion();
   }
 
-  function goTo(index) {
-    if (index < 0 || index >= questions.length) return;
-    currentIndex = index;
+  function getWrongPosition() {
+    return wrongIndices.indexOf(currentIndex);
+  }
+
+  function goToRelative(delta) {
+    if (quizMode === "wrong") {
+      const pos = getWrongPosition();
+      const nextPos = pos + delta;
+      if (nextPos < 0 || nextPos >= wrongIndices.length) return;
+      currentIndex = wrongIndices[nextPos];
+    } else {
+      if (currentIndex + delta < 0 || currentIndex + delta >= questions.length) return;
+      currentIndex += delta;
+    }
     saveProgress();
     renderQuestion();
   }
@@ -260,43 +358,88 @@
     return getCorrectIndices(q).includes(selected);
   }
 
+  function getQuestionStatus(q) {
+    const selected = selections[q.id];
+    if (selected === undefined) return "unanswered";
+    return isAnswerCorrect(q, selected) ? "correct" : "wrong";
+  }
+
+  function collapseAnswerSheet() {
+    answerSheetExpanded = false;
+    updateAnswerSheetView();
+  }
+
+  function toggleAnswerSheet() {
+    answerSheetExpanded = !answerSheetExpanded;
+    updateAnswerSheetView();
+  }
+
+  function updateAnswerSheetView() {
+    const card = $("answer-sheet-card");
+    const body = $("answer-sheet-body");
+    if (card) card.classList.toggle("expanded", answerSheetExpanded);
+    if (body) body.classList.toggle("hidden", !answerSheetExpanded);
+    if (answerSheetExpanded) renderAnswerSheet();
+  }
+
+  function goToQuestionFromSheet(index) {
+    if (index < 0 || index >= questions.length) return;
+    if (quizMode === "wrong") {
+      quizMode = "all";
+      wrongIndices = [];
+      wrongRedoAttempted.clear();
+    }
+    currentIndex = index;
+    saveProgress();
+    showScreen("quiz");
+    renderQuestion();
+  }
+
+  function renderAnswerSheetGrid(gridId) {
+    const grid = $(gridId);
+    if (!grid) return;
+
+    grid.innerHTML = "";
+    questions.forEach((q, index) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "sheet-dot sheet-" + getQuestionStatus(q);
+      if (index === currentIndex) btn.classList.add("sheet-current");
+      btn.textContent = q.id;
+      btn.title = `第 ${q.id} 题`;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        goToQuestionFromSheet(index);
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  function renderAnswerSheet() {
+    if (!answerSheetExpanded) return;
+    renderAnswerSheetGrid("answer-sheet-grid");
+  }
+
   function renderWrongBook() {
     const list = $("wrong-list");
     const empty = $("wrong-empty");
+    const sheet = $("wrong-sheet-card");
     const ids = [...wrongIds].sort((a, b) => a - b);
 
     list.innerHTML = "";
     empty.classList.toggle("hidden", ids.length > 0);
+    if (sheet) sheet.classList.toggle("hidden", ids.length === 0);
 
     ids.forEach((id) => {
-      const q = questions.find((item) => item.id === id);
-      if (!q) return;
+      if (!questions.some((item) => item.id === id)) return;
 
-      const li = document.createElement("li");
-      li.className = "wrong-item";
-
-      const main = document.createElement("button");
-      main.type = "button";
-      main.className = "wrong-item-main";
-      main.innerHTML =
-        `<span class="wrong-item-id">第 ${id} 题</span>` +
-        `<span class="wrong-item-text">${q.question}</span>` +
-        `<span class="wrong-item-answer">正确答案：${formatAnswerLabels(q)}</span>`;
-
-      main.addEventListener("click", () => goToQuestionById(id));
-
-      const mastered = document.createElement("button");
-      mastered.type = "button";
-      mastered.className = "btn btn-success btn-sm";
-      mastered.textContent = "已会";
-      mastered.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeWrong(id);
-        renderWrongBook();
-      });
-
-      li.append(main, mastered);
-      list.appendChild(li);
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "wrong-dot";
+      dot.textContent = id;
+      dot.title = `第 ${id} 题`;
+      dot.addEventListener("click", () => goToQuestionById(id));
+      list.appendChild(dot);
     });
 
     updateWrongCount();
@@ -304,14 +447,25 @@
 
   function renderQuestion() {
     const q = questions[currentIndex];
-    const selected = selections[q.id];
-    const isRevealed = selected !== undefined;
+    const pendingRedo = isWrongRedoPending(q);
+    const selected = pendingRedo ? undefined : selections[q.id];
+    const isRevealed = selections[q.id] !== undefined && !pendingRedo;
     const correctIndices = getCorrectIndices(q);
     const answeredCount = getAnsweredCount();
 
-    $("current-num").textContent = currentIndex + 1;
-    $("progress-fill").style.width =
-      ((answeredCount / questions.length) * 100) + "%";
+    $("current-num").textContent = q.id;
+    $("total-num").textContent = questions.length;
+
+    if (quizMode === "wrong") {
+      const pos = getWrongPosition();
+      $("progress-fill").style.width =
+        wrongIndices.length > 0
+          ? (((pos + 1) / wrongIndices.length) * 100) + "%"
+          : "0%";
+    } else {
+      $("progress-fill").style.width =
+        ((answeredCount / questions.length) * 100) + "%";
+    }
 
     $("question-text").textContent = q.question;
 
@@ -332,7 +486,10 @@
         `<span class="option-label">${LABELS[i]}</span>` +
         `<span class="option-text">${text}</span>`;
 
-      li.addEventListener("click", () => selectOption(i));
+      li.addEventListener("click", (e) => {
+        e.preventDefault();
+        selectOption(i);
+      });
       list.appendChild(li);
     });
 
@@ -358,23 +515,64 @@
       explanation.classList.add("hidden");
     }
 
-    $("btn-prev").disabled = currentIndex === 0;
-    $("btn-next").disabled = currentIndex === questions.length - 1;
+    if (quizMode === "wrong") {
+      const pos = getWrongPosition();
+      $("btn-prev").disabled = pos <= 0;
+      $("btn-next").disabled = pos >= wrongIndices.length - 1;
+    } else {
+      $("btn-prev").disabled = currentIndex === 0;
+      $("btn-next").disabled = currentIndex === questions.length - 1;
+    }
+
+    if (answerSheetExpanded) renderAnswerSheet();
   }
 
   function selectOption(index) {
+    if (!quizInteractionReady) return;
+
     const q = questions[currentIndex];
-    if (selections[q.id] !== undefined) return;
+    if (selections[q.id] !== undefined && !isWrongRedoPending(q)) return;
+
+    if (quizMode === "wrong") {
+      wrongRedoAttempted.add(q.id);
+    }
 
     selections[q.id] = index;
     saveProgress();
 
-    if (!isAnswerCorrect(q, index)) {
+    const correct = isAnswerCorrect(q, index);
+    if (!correct) {
       addWrong(q.id);
+      renderQuestion();
+      return;
+    }
+
+    if (quizMode === "wrong") {
+      const pos = getWrongPosition();
+      removeWrong(q.id);
+      wrongIndices = buildWrongIndices();
+      if (wrongIndices.length === 0) {
+        alert("恭喜，错题已全部重做正确！");
+        quizMode = "all";
+        goHome();
+        return;
+      }
+      currentIndex = wrongIndices[Math.min(pos, wrongIndices.length - 1)];
+      saveProgress();
     }
 
     renderQuestion();
   }
+
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (e.touches.length > 1) e.preventDefault();
+    },
+    { passive: false }
+  );
+
+  document.addEventListener("gesturestart", (e) => e.preventDefault());
 
   init();
 })();
